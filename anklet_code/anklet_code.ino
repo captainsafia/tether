@@ -1,45 +1,122 @@
+#include <VirtualWire.h>
+
 const int xPin = 2;
 const int yPin = 1;
 const int zPin = 0;
 
-double x, y, z; 
-
-int minVal = 265;
-int maxVal = 500;
-
-int accumulatedXValues[20];
-int accumulatedYValues[20];
-int accumulatedZValues[20];
-int count = 0;
+int steps = 0;
 
 void setup() {
-	Serial.begin(9600);
+  // Initializations for RF transmitter
+  vw_set_ptt_inverted(true);
+  vw_setup(2000);
+  vw_set_tx_pin(11);
+}
+
+// Helper function to get the length of an array of floats
+int arrayLength(float numbers[]) {
+  int size_ = sizeof(numbers) / sizeof(*numbers);
+  return sizeof(numbers) / sizeof(*numbers);
+}
+
+// Helper function to return the sum of elements in a list
+float sum(float numbers[]) {
+  float sum = 0;
+  for (int i = 0; i < 100; i++) {
+    sum += numbers[i];
+  }
+  return float(sum);
+}
+
+// Helper function to return the average of elements in a list
+float average(float numbers[]) {
+  return sum(numbers) / 100;
+}
+
+// Function to find average values on each axis
+void calibrate(float results[]) {
+  Serial.print("Calibrating accelerometer...");
+  Serial.print("\n");
+  float xSum, ySum, zSum = 0.0;
+  float xValues[100], yValues[100], zValues[100] = {0.0};
+
+  for (int i = 0; i < 100; i++) {
+    xValues[i] = float(analogRead(xPin));
+    yValues[i] = float(analogRead(yPin));
+    zValues[i] = float(analogRead(zPin));
+  }
+  results[0] = average(xValues);
+  results[1] = average(yValues);
+  results[2] = average(zValues);
+}
+
+// Function to transmit a message using RF transmitter
+void send(char *msg) {
+  vw_send((uint8_t *)msg, strlen(msg));
+  vw_wait_tx();
+}
+
+// Helper function to print out accelerometer data
+void prettyPrintData(int x, int y, int z) {
+  Serial.print("X: ");
+  Serial.print(x);
+  Serial.print("\n");
+  Serial.print("Y: ");
+  Serial.print(y);
+  Serial.print("\n");
+  Serial.print("Z: ");
+  Serial.print(z);
+  Serial.print("\n");
+}
+
+float distance(float numbers[]) {
+  float sum = 0.0;
+  for (int i = 0; i < 3; i++) {
+    sum += numbers[i];
+  }
+  return sqrt(sum);
+}
+
+int isStep(float x, float y, float z) {
+
 }
 
 void loop() {
-  // This portion of code reads data from the 
-  int xRead = analogRead(xPin);
-  int yRead = analogRead(yPin);
-  int zRead = analogRead(zPin);
-  int xAng  = map(xRead, minVal, maxVal, -90, 90);
-  int yAng  = map(yRead, minVal, maxVal, -90, 90);
-  int zAng  = map(zRead, minVal, maxVal, -90, 90);
+  float prevX = float(analogRead(xPin));
+  float prevY = float(analogRead(yPin));
+  float prevZ = float(analogRead(zPin));
+
+  prettyPrintData(prevX, prevY, prevZ);
   
-  // This portion of the code is for testing purposes and 
-  // should be commented out in the production version
-  Serial.print("X: ");
-  Serial.print(xAng);
-  Serial.print("Y: ");
-  Serial.print(yAng);
-  Serial.print("Z: ");
-  Serial.print(zAng);
-  delay(100);
+  float oldAverages[3];
+  calibrate(oldAverages);
 
-  accumulatedXValues[count] = xAng;
-  accumulatedYValues[count] = yAng;
-  accumulatedZValues[count] = zAng;
-}
+  prettyPrintData(oldAverages[0], oldAverages[1], oldAverages[2]);
 
-int calculateDelta(int previousValues, int timePeriod) {
-	
+  float xThreshold = oldAverages[0] * 0.05;
+  float yThreshold = oldAverages[1] * 0.05;
+  float zThreshold = oldAverages[2] * 0.05;
+
+  float x = float(analogRead(xPin));
+  float y = float(analogRead(yPin));
+  float z = float(analogRead(zPin));
+
+  prettyPrintData(x, y, z);
+
+  if (abs(prevX - x) > xThreshold || abs(prevY - y) > yThreshold || abs(prevZ - z) > zThreshold) {
+    steps++;
+    Serial.println("Incremented step count to: ");
+    Serial.println(steps);
+  }
+
+  if (steps >= 3) {
+    send("1");
+    Serial.print("Sucessfully sent movement indicator!\n");
+    steps = 0;
+  } else {
+    send("0");
+    Serial.print("Sucessfully sent no movement indicator!\n");
+  }
+
+  delay(1000);
 }
